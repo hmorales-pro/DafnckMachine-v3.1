@@ -306,6 +306,21 @@ DafnckMachine uses MCP servers for advanced agent and workflow integration (Curs
 - For more details, see the comments in the template files and the main README.
 
 ---
+## Web Interface
+
+The optional web UI lives in `web-ui/` and provides a simple dashboard for Task Master.
+
+### Installation
+
+```bash
+cd web-ui
+npm install
+npm run dev
+```
+
+### Usage
+
+Open `http://localhost:3000` in your browser. The interface lists current tasks, lets you view details, and includes a form to add or update tasks using the Task Master server defined in `.roo/mcp.json`.
 
 **Last Updated**: 2025-06-05  
 **Support**: See `01_Machine/04_Documentation/`  
