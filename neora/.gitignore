@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Néora : projets générés (espace de travail du moteur)
+/.neora-workspace
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

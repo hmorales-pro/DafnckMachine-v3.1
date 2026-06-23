@@ -10,6 +10,11 @@ export const hasRealKey = Boolean(apiKey);
 
 const client = apiKey ? new Anthropic({ apiKey }) : null;
 
+/** Renvoie le client Anthropic, ou null en mode démo. */
+export function getClient(): Anthropic | null {
+  return client;
+}
+
 /**
  * Génère une réponse d'agent.
  * - Si une clé ANTHROPIC_API_KEY est configurée : vrai appel à Claude.
