@@ -23,20 +23,23 @@ export default function Home() {
             Marketing, SEO, prospection, compta, juridique, recrutement, relation client :
             chaque agent est un expert de son domaine.
           </p>
-          <div className="mt-8 flex items-center justify-center gap-4">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+            <Link
+              href="/studio"
+              className="rounded-lg bg-gradient-to-r from-violet-500 to-blue-500 px-6 py-3 font-medium text-white transition hover:opacity-90"
+            >
+              🚀 Construire un SaaS
+            </Link>
             <a
               href="#agents"
-              className="rounded-lg bg-white px-6 py-3 font-medium text-black transition hover:bg-white/90"
+              className="rounded-lg border border-white/15 px-6 py-3 font-medium text-white transition hover:bg-white/5"
             >
               Découvrir l&apos;équipe
             </a>
-            <Link
-              href={`/agents/${AGENTS[0].slug}`}
-              className="rounded-lg border border-white/15 px-6 py-3 font-medium text-white transition hover:bg-white/5"
-            >
-              Essayer un agent →
-            </Link>
           </div>
+          <p className="mt-4 text-sm text-white/40">
+            Studio propulsé par le moteur DafnckMachine — de l&apos;idée au code.
+          </p>
         </div>
       </section>
 
