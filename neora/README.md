@@ -34,6 +34,24 @@ réponses des agents, ajoutez votre clé dans `.env.local` :
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+## 💾 Persistance (Supabase optionnel)
+
+Les projets générés peuvent être sauvegardés (page `/projects`). La couche de
+persistance est **backend-agnostique** :
+
+- **Par défaut** : stockage local dans `.neora-data/` (fonctionne immédiatement).
+- **Avec Supabase** : si les variables d'env sont présentes, bascule automatique
+  sur Postgres.
+
+```
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=...   # côté serveur
+```
+
+Appliquer la migration `supabase/migrations/0001_init.sql` sur votre projet
+(CLI, SQL editor, ou MCP `apply_migration`). Elle crée la table `neora_projects`
+avec RLS (chaque utilisateur ne voit que ses projets — prêt pour l'auth Supabase).
+
 ## 🏗️ Architecture
 
 ```

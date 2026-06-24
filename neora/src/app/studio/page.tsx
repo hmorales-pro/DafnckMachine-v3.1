@@ -50,6 +50,7 @@ export default function StudioPage() {
   const [e2e, setE2e] = useState<E2eState>({ running: false });
   const [monkey, setMonkey] = useState<MonkeyState>({ running: false });
   const [fix, setFix] = useState<FixState>({ running: false });
+  const [save, setSave] = useState<{ saving: boolean; saved?: boolean; backend?: string }>({ saving: false });
 
   // Templates : auto-sélection selon l'idée, ajustable par l'utilisateur.
   const [templates, setTemplates] = useState<string[]>([]);
@@ -216,6 +217,33 @@ export default function StudioPage() {
     }
   }
 
+  async function saveProject() {
+    if (!gen || save.saving) return;
+    setSave({ saving: true });
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idea: idea.trim(),
+          summary: gen.summary,
+          templates,
+          files: gen.files,
+          qa: {
+            tests: qa.passed,
+            duplication: stat.duplication?.percentage,
+            e2e: e2e.passed,
+            monkey: monkey.passed,
+          },
+        }),
+      });
+      const data = await res.json();
+      setSave({ saving: false, saved: !data.error, backend: data.backend });
+    } catch {
+      setSave({ saving: false, saved: false });
+    }
+  }
+
   function downloadAll() {
     const doc = PHASES_META.filter((p) => states[p.id].artifact)
       .map((p) => `${states[p.id].artifact}`)
@@ -237,9 +265,14 @@ export default function StudioPage() {
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
-      <Link href="/" className="text-sm text-white/40 transition hover:text-white">
-        ← Néora
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link href="/" className="text-sm text-white/40 transition hover:text-white">
+          ← Néora
+        </Link>
+        <Link href="/projects" className="text-sm text-white/50 transition hover:text-white">
+          📁 Mes projets
+        </Link>
+      </div>
 
       <header className="mt-4">
         <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
@@ -415,7 +448,23 @@ export default function StudioPage() {
 
           {gen && (
             <div className="mt-6 space-y-6">
-              <p className="text-sm text-white/60">{gen.summary}</p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-white/60">{gen.summary}</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={saveProject}
+                    disabled={save.saving}
+                    className="shrink-0 rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/5 disabled:opacity-50"
+                  >
+                    {save.saving ? "Enregistrement…" : "💾 Sauvegarder le projet"}
+                  </button>
+                  {save.saved && (
+                    <span className="text-xs text-emerald-300">
+                      ✓ Enregistré ({save.backend})
+                    </span>
+                  )}
+                </div>
+              </div>
 
               {/* Arborescence + contenu */}
               <div className="grid gap-4 md:grid-cols-[220px_1fr]">

@@ -38,6 +38,8 @@ yarn-error.log*
 
 # Néora : projets générés (espace de travail du moteur)
 /.neora-workspace
+# Néora : persistance locale (fallback hors Supabase)
+/.neora-data
 
 # typescript
 *.tsbuildinfo
