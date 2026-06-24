@@ -64,6 +64,9 @@ export default function StudioPage() {
   } | null>(null);
   const [showRoutes, setShowRoutes] = useState(false);
   const [flowError, setFlowError] = useState<string | null>(null);
+  const [log, setLog] = useState<string[]>([]);
+  const logLine = (m: string) =>
+    setLog((l) => [...l.slice(-60), `${new Date().toLocaleTimeString()} · ${m}`]);
   const refreshUsage = () =>
     fetch("/api/usage")
       .then((r) => r.json())
@@ -105,6 +108,7 @@ export default function StudioPage() {
     setGen(null);
     setQa({ running: false });
     setFlowError(null);
+    logLine("▶ Construction démarrée");
 
     try {
       const res = await fetch("/api/build/stream", {
@@ -136,6 +140,7 @@ export default function StudioPage() {
           };
           if (ev.type === "phase-start") {
             setOpen(ev.id);
+            logLine(`▶ phase ${ev.id}`);
             setStates((s) => ({ ...s, [ev.id]: { status: "running", artifact: "" } }));
           } else if (ev.type === "delta") {
             setStates((s) => ({
@@ -143,8 +148,10 @@ export default function StudioPage() {
               [ev.id]: { status: "running", artifact: (s[ev.id]?.artifact ?? "") + ev.text },
             }));
           } else if (ev.type === "phase-done") {
+            logLine(`✓ phase ${ev.id} (${ev.artifact?.length ?? 0} car.)`);
             setStates((s) => ({ ...s, [ev.id]: { status: "done", artifact: ev.artifact } }));
           } else if (ev.type === "done") {
+            logLine(`✔ Construction terminée${ev.mock ? " (mode démo)" : ""}`);
             setMock(Boolean(ev.mock));
           } else if (ev.type === "error") {
             throw new Error(ev.error);
@@ -152,6 +159,7 @@ export default function StudioPage() {
         }
       }
     } catch (e) {
+      logLine(`✕ Construction : ${e instanceof Error ? e.message : "échec"}`);
       setFlowError(`Construction : ${e instanceof Error ? e.message : "échec du flux"}`);
       setStates((s) => {
         const next = { ...s };
@@ -176,6 +184,7 @@ export default function StudioPage() {
     PHASES_META.forEach((p) => {
       if (states[p.id].artifact) prior[p.id] = states[p.id].artifact;
     });
+    logLine("▶ Génération du code…");
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -186,8 +195,10 @@ export default function StudioPage() {
       if (!res.ok) throw new Error(data.error ?? `Erreur ${res.status}`);
       setGen(data as GenResult);
       setOpenFile(data.files[0]?.path ?? null);
+      logLine(`✓ Code généré (${data.files?.length ?? 0} fichiers)`);
     } catch (e) {
       setGen(null);
+      logLine(`✕ Génération : ${e instanceof Error ? e.message : "échec"}`);
       setFlowError(`Génération du code : ${e instanceof Error ? e.message : "échec"}`);
     } finally {
       setGenerating(false);
@@ -927,6 +938,16 @@ export default function StudioPage() {
             </div>
           )}
         </section>
+      )}
+      {log.length > 0 && (
+        <details className="mt-8 rounded-xl border border-white/10 bg-black/30 p-4" open>
+          <summary className="cursor-pointer text-sm font-medium text-white/70">
+            🩺 Journal technique ({log.length})
+          </summary>
+          <pre className="mt-3 max-h-60 overflow-auto text-xs leading-relaxed text-white/50">
+            {log.join("\n")}
+          </pre>
+        </details>
       )}
     </main>
     </>
