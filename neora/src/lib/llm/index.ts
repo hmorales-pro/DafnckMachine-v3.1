@@ -118,12 +118,34 @@ function chunk(text: string, size = 28): string[] {
   return out;
 }
 
-export async function generateReply(task: Task, system: string, messages: ChatMessage[]): Promise<string> {
-  const route = resolveRoute(task);
-  if (!route) return mock(messages);
+type Route = { provider: ProviderId; model: string };
+
+// Liste ordonnée de routes candidates : la route résolue d'abord, puis les
+// autres fournisseurs disponibles (pour le repli). Si une route est forcée
+// (LLM_PROVIDER) ou surchargée (LLM_ROUTE_<TASK>), on ne tente que celle-là.
+function candidateRoutes(task: Task): Route[] {
+  const primary = resolveRoute(task);
+  if (!primary) return [];
+  if (process.env[`LLM_ROUTE_${task.toUpperCase()}`] || process.env.LLM_PROVIDER) return [primary];
+  const tier = TASK_TIER[task];
+  const order = tier === "strong" ? STRONG_ORDER : CHEAP_ORDER;
+  return order.filter((p) => available.includes(p)).map((p) => ({ provider: p, model: CONFIG[p][tier] }));
+}
+
+function enrich(err: unknown, tried: Route[]): Error {
+  const status = (err as { status?: number })?.status;
+  const last = tried[tried.length - 1];
+  const where = tried.map((r) => `${r.provider}/${r.model}`).join(" → ");
+  let hint = "";
+  if (status === 429) hint = " — limite de débit ou quota dépassé (vérifiez vos crédits / RPM)";
+  else if (status === 401) hint = " — clé API invalide";
+  else if (status === 404) hint = " — modèle introuvable (nom de modèle incorrect ?)";
+  return new Error(`${status ?? ""} sur ${last.provider}/${last.model}${hint}. Tenté : ${where}`);
+}
+
+async function callOnce(route: Route, system: string, messages: ChatMessage[]): Promise<string> {
   const { provider, model } = route;
   const client = clientFor(provider);
-
   if (client instanceof Anthropic) {
     const r = await client.messages.create({ model, max_tokens: 8192, system, messages });
     recordUsage(provider, model, r.usage.input_tokens, r.usage.output_tokens);
@@ -132,33 +154,36 @@ export async function generateReply(task: Task, system: string, messages: ChatMe
       .map((b) => b.text)
       .join("");
   }
-
   const r = await client.chat.completions.create({
     model,
     messages: [{ role: "system", content: system }, ...messages],
   });
-  const u = r.usage;
   recordUsage(
     provider,
     model,
-    u?.prompt_tokens ?? estTokens(system + JSON.stringify(messages)),
-    u?.completion_tokens ?? estTokens(r.choices[0]?.message?.content ?? "")
+    r.usage?.prompt_tokens ?? estTokens(system + JSON.stringify(messages)),
+    r.usage?.completion_tokens ?? estTokens(r.choices[0]?.message?.content ?? "")
   );
   return r.choices[0]?.message?.content ?? "";
 }
 
-export async function* streamReply(task: Task, system: string, messages: ChatMessage[]): AsyncGenerator<string> {
-  const route = resolveRoute(task);
-  if (!route) {
-    for (const c of chunk(mock(messages))) {
-      yield c;
-      await new Promise((r) => setTimeout(r, 12));
+export async function generateReply(task: Task, system: string, messages: ChatMessage[]): Promise<string> {
+  const cands = candidateRoutes(task);
+  if (!cands.length) return mock(messages);
+  let lastErr: unknown;
+  for (const route of cands) {
+    try {
+      return await callOnce(route, system, messages);
+    } catch (e) {
+      lastErr = e;
     }
-    return;
   }
+  throw enrich(lastErr, cands);
+}
+
+async function* streamOnce(route: Route, system: string, messages: ChatMessage[]): AsyncGenerator<string> {
   const { provider, model } = route;
   const client = clientFor(provider);
-
   if (client instanceof Anthropic) {
     const stream = client.messages.stream({ model, max_tokens: 8192, system, messages });
     for await (const ev of stream) {
@@ -168,7 +193,6 @@ export async function* streamReply(task: Task, system: string, messages: ChatMes
     recordUsage(provider, model, final.usage.input_tokens, final.usage.output_tokens);
     return;
   }
-
   const stream = await client.chat.completions.create({
     model,
     messages: [{ role: "system", content: system }, ...messages],
@@ -191,4 +215,31 @@ export async function* streamReply(task: Task, system: string, messages: ChatMes
     usage?.prompt_tokens ?? estTokens(system + JSON.stringify(messages)),
     usage?.completion_tokens ?? estTokens(out)
   );
+}
+
+export async function* streamReply(task: Task, system: string, messages: ChatMessage[]): AsyncGenerator<string> {
+  const cands = candidateRoutes(task);
+  if (!cands.length) {
+    for (const c of chunk(mock(messages))) {
+      yield c;
+      await new Promise((r) => setTimeout(r, 12));
+    }
+    return;
+  }
+  let lastErr: unknown;
+  for (const route of cands) {
+    let yielded = false;
+    try {
+      for await (const d of streamOnce(route, system, messages)) {
+        yielded = true;
+        yield d;
+      }
+      return;
+    } catch (e) {
+      lastErr = e;
+      // Repli impossible si du contenu a déjà été émis (éviterait les doublons).
+      if (yielded) throw enrich(e, [route]);
+    }
+  }
+  throw enrich(lastErr, cands);
 }
