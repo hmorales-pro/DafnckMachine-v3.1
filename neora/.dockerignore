@@ -1,0 +1,8 @@
+node_modules
+.next
+.neora-workspace
+.neora-data
+.git
+.env*
+npm-debug.log*
+*.log

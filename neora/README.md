@@ -27,6 +27,25 @@ cp .env.example .env.local   # puis renseignez votre ANTHROPIC_API_KEY (optionne
 npm run dev                  # http://localhost:3000
 ```
 
+> ⚠️ L'app vit dans le sous-dossier `neora/`. Lancez bien `npm install` **dans
+> ce dossier** (le `node_modules` n'est pas versionné). Si Next se plaint de
+> lockfiles multiples, c'est qu'un `package-lock.json` traîne dans un dossier
+> parent (ex. votre home) — supprimez-le.
+
+## 🐳 Docker (le plus simple)
+
+Aucune installation de Node/dépendances requise. L'image embarque même le
+navigateur Chromium, donc les portes QA E2E/Monkey fonctionnent en conteneur.
+
+```bash
+cd neora
+docker compose up --build        # http://localhost:3000
+```
+
+Pour activer les vraies réponses Claude, créez un `.env` à côté du
+`docker-compose.yml` avec `ANTHROPIC_API_KEY=sk-ant-...` (lu automatiquement).
+Les comptes et projets sont persistés dans le volume `neora-data`.
+
 Sans clé API, l'application tourne en **mode démo**. Pour activer les vraies
 réponses des agents, ajoutez votre clé dans `.env.local` :
 

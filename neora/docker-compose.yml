@@ -1,0 +1,18 @@
+services:
+  neora:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Optionnel : sans clé, l'app tourne en mode démo.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - NEORA_SESSION_SECRET=${NEORA_SESSION_SECRET:-neora-dev-secret-change-me}
+      # Optionnel : bascule la persistance sur Supabase si renseigné.
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
+    volumes:
+      # Persiste les comptes + projets (stockage local) entre redémarrages.
+      - neora-data:/app/.neora-data
+
+volumes:
+  neora-data:
