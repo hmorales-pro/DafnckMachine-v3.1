@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PHASES_META, type PhaseId } from "@/lib/engine/phasesMeta";
 import { QA_AGENTS } from "@/lib/engine/qaAgents";
+import { TEMPLATES_META, autoSelectTemplates } from "@/lib/engine/templatesMeta";
 import { renderMarkdown } from "@/lib/markdown";
 
 type Status = "pending" | "running" | "done" | "error";
@@ -12,6 +13,9 @@ type PhaseState = { status: Status; artifact?: string };
 type GenFile = { path: string; content: string };
 type GenResult = { id: string; summary: string; files: GenFile[]; review: string };
 type QaState = { running: boolean; passed?: boolean; output?: string; testFiles?: number };
+type Dup = { clones: number; duplicatedLines: number; percentage: number };
+type Dead = { unusedFiles: string[]; unusedExports: { file: string; name: string; line: number }[] };
+type StaticState = { running: boolean; duplication?: Dup; deadCode?: Dead };
 
 const EXAMPLES = [
   "Un SaaS de facturation simple pour auto-entrepreneurs",
@@ -37,6 +41,19 @@ export default function StudioPage() {
   const [generating, setGenerating] = useState(false);
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [qa, setQa] = useState<QaState>({ running: false });
+  const [stat, setStat] = useState<StaticState>({ running: false });
+
+  // Templates : auto-sélection selon l'idée, ajustable par l'utilisateur.
+  const [templates, setTemplates] = useState<string[]>([]);
+  const [touchedTemplates, setTouchedTemplates] = useState(false);
+  useEffect(() => {
+    if (!touchedTemplates) setTemplates(autoSelectTemplates(idea));
+  }, [idea, touchedTemplates]);
+
+  function toggleTemplate(id: string) {
+    setTouchedTemplates(true);
+    setTemplates((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]));
+  }
 
   async function build() {
     const trimmed = idea.trim();
@@ -83,6 +100,7 @@ export default function StudioPage() {
     setGenerating(true);
     setGen(null);
     setQa({ running: false });
+    setStat({ running: false });
     const prior: Partial<Record<PhaseId, string>> = {};
     PHASES_META.forEach((p) => {
       if (states[p.id].artifact) prior[p.id] = states[p.id].artifact;
@@ -91,7 +109,7 @@ export default function StudioPage() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea: idea.trim(), prior }),
+        body: JSON.stringify({ idea: idea.trim(), prior, templates }),
       });
       if (!res.ok) throw new Error();
       const data = (await res.json()) as GenResult;
@@ -117,6 +135,22 @@ export default function StudioPage() {
       setQa({ running: false, passed: data.passed, output: data.output, testFiles: data.testFiles });
     } catch {
       setQa({ running: false, passed: false, output: "Erreur lors de l'exécution des tests." });
+    }
+  }
+
+  async function runStatic() {
+    if (!gen || stat.running) return;
+    setStat({ running: true });
+    try {
+      const res = await fetch("/api/static", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: gen.id }),
+      });
+      const data = await res.json();
+      setStat({ running: false, duplication: data.duplication, deadCode: data.deadCode });
+    } catch {
+      setStat({ running: false });
     }
   }
 
@@ -287,6 +321,36 @@ export default function StudioPage() {
             </button>
           </div>
 
+          {/* Templates techniques pré-validés */}
+          <div className="mt-5">
+            <p className="mb-2 text-xs uppercase tracking-wide text-white/30">
+              Templates techniques pré-validés (auto-suggérés)
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {TEMPLATES_META.map((t) => {
+                const on = templates.includes(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => toggleTemplate(t.id)}
+                    title={t.description}
+                    className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                      on
+                        ? "border-violet-400/50 bg-violet-500/15 text-white"
+                        : "border-white/10 text-white/50 hover:border-white/25 hover:text-white/80"
+                    }`}
+                  >
+                    {on ? "✓ " : ""}
+                    {t.emoji} {t.name}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-xs text-white/30">
+              Squelettes éprouvés livrés avec leurs tests — ils passent la porte QA.
+            </p>
+          </div>
+
           {gen && (
             <div className="mt-6 space-y-6">
               <p className="text-sm text-white/60">{gen.summary}</p>
@@ -368,6 +432,68 @@ export default function StudioPage() {
                         {qa.output}
                       </pre>
                     )}
+                  </div>
+                )}
+              </div>
+
+              {/* Porte QA : analyse statique réelle (jscpd + knip) */}
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-white">
+                      📡 Porte QA — analyse statique (jscpd + knip)
+                    </h3>
+                    <p className="text-xs text-white/40">
+                      Détecte duplications et code mort. Alternative légère à SonarQube.
+                    </p>
+                  </div>
+                  <button
+                    onClick={runStatic}
+                    disabled={stat.running}
+                    className="shrink-0 rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/5 disabled:opacity-50"
+                  >
+                    {stat.running ? "Analyse…" : "Analyser le code"}
+                  </button>
+                </div>
+                {stat.duplication && stat.deadCode && (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-lg border border-white/10 bg-black/30 p-3">
+                      <p className="text-xs font-medium text-white/70">Duplications (jscpd)</p>
+                      <p
+                        className={`mt-1 text-2xl font-bold ${
+                          stat.duplication.percentage > 10 ? "text-amber-300" : "text-emerald-300"
+                        }`}
+                      >
+                        {stat.duplication.percentage}%
+                      </p>
+                      <p className="text-xs text-white/40">
+                        {stat.duplication.clones} clone(s) · {stat.duplication.duplicatedLines} ligne(s)
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-white/10 bg-black/30 p-3">
+                      <p className="text-xs font-medium text-white/70">Code mort (knip)</p>
+                      <p
+                        className={`mt-1 text-2xl font-bold ${
+                          stat.deadCode.unusedFiles.length + stat.deadCode.unusedExports.length > 0
+                            ? "text-amber-300"
+                            : "text-emerald-300"
+                        }`}
+                      >
+                        {stat.deadCode.unusedFiles.length + stat.deadCode.unusedExports.length}
+                      </p>
+                      <p className="text-xs text-white/40">
+                        {stat.deadCode.unusedFiles.length} fichier(s) · {stat.deadCode.unusedExports.length} export(s) inutilisé(s)
+                      </p>
+                      {stat.deadCode.unusedExports.length > 0 && (
+                        <ul className="mt-2 space-y-0.5 text-xs text-amber-200/80">
+                          {stat.deadCode.unusedExports.slice(0, 5).map((e, i) => (
+                            <li key={i}>
+                              {e.name} <span className="text-white/30">({e.file}:{e.line})</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

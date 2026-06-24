@@ -43,7 +43,7 @@ export const QA_AGENTS: QaAgent[] = [
     name: "Templates techniques",
     agent: "tech-spec-agent",
     emoji: "🧱",
-    status: "planned",
+    status: "active",
     description: "Injection de squelettes éprouvés (auth, paiement, CRUD) pré-validés.",
   },
   {
@@ -64,10 +64,10 @@ export const QA_AGENTS: QaAgent[] = [
   },
   {
     id: "static-analysis",
-    name: "Analyse statique (SonarQube)",
+    name: "Analyse statique (jscpd + knip)",
     agent: "efficiency-optimization-agent",
     emoji: "📡",
-    status: "planned",
-    description: "Code mort, duplications, dette technique. Nécessite un serveur Sonar.",
+    status: "active",
+    description: "Code mort (knip) et duplications (jscpd) — alternative légère à SonarQube.",
   },
 ];
