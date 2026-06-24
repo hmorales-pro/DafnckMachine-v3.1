@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import NavBar from "@/components/NavBar";
 import { PHASES_META, type PhaseId } from "@/lib/engine/phasesMeta";
 import { QA_AGENTS } from "@/lib/engine/qaAgents";
 import { TEMPLATES_META, autoSelectTemplates } from "@/lib/engine/templatesMeta";
@@ -297,16 +298,9 @@ export default function StudioPage() {
     s === "done" ? "✓" : s === "running" ? "⏳" : s === "error" ? "✕" : "○";
 
   return (
+    <>
+    <NavBar />
     <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
-      <div className="flex items-center justify-between">
-        <Link href="/" className="text-sm text-white/40 transition hover:text-white">
-          ← Néora
-        </Link>
-        <Link href="/projects" className="text-sm text-white/50 transition hover:text-white">
-          📁 Mes projets
-        </Link>
-      </div>
-
       <header className="mt-4">
         <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
           ⚙️ Moteur DafnckMachine · 6 agents en pipeline
@@ -857,5 +851,6 @@ export default function StudioPage() {
         </section>
       )}
     </main>
+    </>
   );
 }

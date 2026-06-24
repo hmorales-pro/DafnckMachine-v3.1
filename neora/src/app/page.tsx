@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { AGENTS } from "@/lib/agents";
+import NavBar from "@/components/NavBar";
 
 export default function Home() {
   return (
     <main className="flex-1">
+      <NavBar />
       {/* Hero */}
       <section className="hero-glow border-b border-white/5">
         <div className="mx-auto max-w-6xl px-6 py-20 text-center">
