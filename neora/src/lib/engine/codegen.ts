@@ -23,6 +23,9 @@ const SYSTEM =
   "process.env.PORT, sert `public/index.html` et expose l'API métier), et `e2e.json` décrivant un " +
   "scénario { url, steps: [ {action:'fill'|'click'|'expectText', selector, value?} ] } qui valide la " +
   "fonctionnalité cœur dans le navigateur. " +
+  "IMPORTANT : `public/index.html` doit être AUTONOME et directement affichable — HTML + CSS + JS " +
+  "vanilla en inline, AUCUN framework nécessitant un build (pas de React/JSX/Next), AUCUN import de " +
+  "CDN externe. L'app doit fonctionner avec un simple `node server.js`. " +
   "Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, au format : " +
   '{"summary": string, "testCommand": "node --test", "files": [{"path": string, "content": string}]}. ' +
   "Les chemins sont relatifs (jamais absolus, jamais de \"..\").";

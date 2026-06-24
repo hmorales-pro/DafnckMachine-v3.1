@@ -47,6 +47,7 @@ export default function StudioPage() {
   const [gen, setGen] = useState<GenResult | null>(null);
   const [generating, setGenerating] = useState(false);
   const [openFile, setOpenFile] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ loading: boolean; url?: string; error?: string }>({ loading: false });
   const [qa, setQa] = useState<QaState>({ running: false });
   const [stat, setStat] = useState<StaticState>({ running: false });
   const [e2e, setE2e] = useState<E2eState>({ running: false });
@@ -176,6 +177,7 @@ export default function StudioPage() {
     if (generating || !idea.trim()) return;
     setGenerating(true);
     setGen(null);
+    setPreview({ loading: false });
     setQa({ running: false });
     setStat({ running: false });
     setE2e({ running: false });
@@ -203,6 +205,27 @@ export default function StudioPage() {
     } finally {
       setGenerating(false);
       refreshUsage();
+    }
+  }
+
+  async function launchPreview() {
+    if (!gen || preview.loading) return;
+    setPreview({ loading: true });
+    logLine("▶ Démarrage de l'aperçu…");
+    try {
+      const res = await fetch("/api/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: gen.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "échec");
+      setPreview({ loading: false, url: data.url });
+      logLine(`✓ Aperçu démarré : ${data.url}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "échec";
+      setPreview({ loading: false, error: msg });
+      logLine(`✕ Aperçu : ${msg}`);
     }
   }
 
@@ -569,6 +592,43 @@ export default function StudioPage() {
 
           {gen && (
             <div className="mt-6 space-y-6">
+              {/* Aperçu live de l'app générée */}
+              <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.04] p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-white">👁️ Aperçu de l&apos;app</h3>
+                    <p className="text-xs text-white/40">
+                      Démarre le projet généré et l&apos;affiche en direct.
+                    </p>
+                  </div>
+                  <button
+                    onClick={launchPreview}
+                    disabled={preview.loading}
+                    className="shrink-0 rounded-lg bg-gradient-to-r from-violet-500 to-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    {preview.loading ? "Démarrage…" : preview.url ? "Relancer l'aperçu" : "Lancer l'aperçu"}
+                  </button>
+                </div>
+                {preview.error && (
+                  <p className="mt-3 text-xs text-red-300">⚠️ {preview.error}</p>
+                )}
+                {preview.url && (
+                  <div className="mt-3">
+                    <div className="mb-1 flex items-center justify-between text-xs text-white/40">
+                      <span>{preview.url}</span>
+                      <a href={preview.url} target="_blank" rel="noreferrer" className="text-violet-300 hover:text-violet-200">
+                        Ouvrir dans un onglet ↗
+                      </a>
+                    </div>
+                    <iframe
+                      src={preview.url}
+                      className="h-[480px] w-full rounded-lg border border-white/10 bg-white"
+                      title="Aperçu de l'app générée"
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-white/60">{gen.summary}</p>
                 <div className="flex items-center gap-2">
