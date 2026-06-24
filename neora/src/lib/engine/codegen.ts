@@ -20,6 +20,10 @@ const SYSTEM =
   "(utilise uniquement les modules natifs Node et le runner de test natif `node:test`). " +
   "Le projet doit contenir : un package.json (\"type\":\"module\", script test = \"node --test\"), " +
   "au moins un module de logique métier et au moins un fichier de test `*.test.js` qui passe. " +
+  "Inclus AUSSI une petite app web testable de bout en bout : `server.js` (serveur node:http qui lit " +
+  "process.env.PORT, sert `public/index.html` et expose l'API métier), et `e2e.json` décrivant un " +
+  "scénario { url, steps: [ {action:'fill'|'click'|'expectText', selector, value?} ] } qui valide la " +
+  "fonctionnalité cœur dans le navigateur. " +
   "Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, au format : " +
   '{"summary": string, "testCommand": "node --test", "files": [{"path": string, "content": string}]}. ' +
   "Les chemins sont relatifs (jamais absolus, jamais de \"..\").";
@@ -131,8 +135,84 @@ test("lineTotal rejette les valeurs négatives", () => {
 `,
       },
       {
+        path: "server.js",
+        content: `// Serveur minimal (Node natif) servant l'app et l'API de calcul.
+import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
+import { computeInvoice } from "./src/invoice.js";
+
+const port = process.env.PORT || 3000;
+
+const server = createServer(async (req, res) => {
+  if (req.method === "POST" && req.url === "/api/compute") {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    try {
+      const { quantity, unitPrice } = JSON.parse(body || "{}");
+      const result = computeInvoice([{ quantity: Number(quantity), unitPrice: Number(unitPrice) }]);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(result));
+    } catch {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "Entrée invalide" }));
+    }
+    return;
+  }
+  const html = await readFile(new URL("./public/index.html", import.meta.url));
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  res.end(html);
+});
+
+server.listen(port, () => console.log("App sur http://localhost:" + port));
+`,
+      },
+      {
+        path: "public/index.html",
+        content: `<!doctype html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>Facturation</title></head>
+<body>
+  <h1>Calcul de facture</h1>
+  <label>Quantité <input id="qty" type="number" value="1"></label>
+  <label>Prix unitaire <input id="price" type="number" value="0"></label>
+  <button id="calc">Calculer</button>
+  <p>Total TTC : <span id="result">—</span></p>
+  <script>
+    document.getElementById("calc").addEventListener("click", async () => {
+      const quantity = document.getElementById("qty").value;
+      const unitPrice = document.getElementById("price").value;
+      const res = await fetch("/api/compute", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ quantity, unitPrice }),
+      });
+      const data = await res.json();
+      document.getElementById("result").textContent = data.ttc + " €";
+    });
+  </script>
+</body>
+</html>
+`,
+      },
+      {
+        path: "e2e.json",
+        content: JSON.stringify(
+          {
+            url: "/",
+            steps: [
+              { action: "fill", selector: "#qty", value: 2 },
+              { action: "fill", selector: "#price", value: 50 },
+              { action: "click", selector: "#calc" },
+              { action: "expectText", selector: "#result", value: "120" },
+            ],
+          },
+          null,
+          2
+        ),
+      },
+      {
         path: "README.md",
-        content: `# Projet généré par Néora\n\nIdée : ${idea}\n\n## Lancer les tests\n\n\`\`\`bash\nnode --test\n\`\`\`\n`,
+        content: `# Projet généré par Néora\n\nIdée : ${idea}\n\n## Lancer\n\n\`\`\`bash\nnode --test   # tests unitaires\nnode server.js  # démarrer l'app\n\`\`\`\n`,
       },
     ],
   };

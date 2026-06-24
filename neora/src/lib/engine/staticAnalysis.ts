@@ -65,7 +65,7 @@ export async function runStaticAnalysis(id: string): Promise<StaticResult> {
   const knipConfig = path.join(dir, "knip.json");
   await fs.writeFile(
     knipConfig,
-    JSON.stringify({ entry: ["**/*.test.js"], project: ["**/*.js"] })
+    JSON.stringify({ entry: ["**/*.test.js", "server.js"], project: ["**/*.js"] })
   );
   const deadCode = { unusedFiles: [] as string[], unusedExports: [] as { file: string; name: string; line: number }[] };
   try {

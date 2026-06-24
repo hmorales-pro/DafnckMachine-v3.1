@@ -16,6 +16,9 @@ type QaState = { running: boolean; passed?: boolean; output?: string; testFiles?
 type Dup = { clones: number; duplicatedLines: number; percentage: number };
 type Dead = { unusedFiles: string[]; unusedExports: { file: string; name: string; line: number }[] };
 type StaticState = { running: boolean; duplication?: Dup; deadCode?: Dead };
+type E2eStep = { desc: string; passed: boolean; error?: string };
+type E2eState = { running: boolean; ran?: boolean; available?: boolean; passed?: boolean; steps?: E2eStep[]; reason?: string };
+type MonkeyState = { running: boolean; ran?: boolean; interactions?: number; errors?: string[]; passed?: boolean };
 
 const EXAMPLES = [
   "Un SaaS de facturation simple pour auto-entrepreneurs",
@@ -42,6 +45,8 @@ export default function StudioPage() {
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [qa, setQa] = useState<QaState>({ running: false });
   const [stat, setStat] = useState<StaticState>({ running: false });
+  const [e2e, setE2e] = useState<E2eState>({ running: false });
+  const [monkey, setMonkey] = useState<MonkeyState>({ running: false });
 
   // Templates : auto-sélection selon l'idée, ajustable par l'utilisateur.
   const [templates, setTemplates] = useState<string[]>([]);
@@ -101,6 +106,8 @@ export default function StudioPage() {
     setGen(null);
     setQa({ running: false });
     setStat({ running: false });
+    setE2e({ running: false });
+    setMonkey({ running: false });
     const prior: Partial<Record<PhaseId, string>> = {};
     PHASES_META.forEach((p) => {
       if (states[p.id].artifact) prior[p.id] = states[p.id].artifact;
@@ -151,6 +158,38 @@ export default function StudioPage() {
       setStat({ running: false, duplication: data.duplication, deadCode: data.deadCode });
     } catch {
       setStat({ running: false });
+    }
+  }
+
+  async function runE2e() {
+    if (!gen || e2e.running) return;
+    setE2e({ running: true });
+    try {
+      const res = await fetch("/api/e2e", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: gen.id }),
+      });
+      const data = await res.json();
+      setE2e({ running: false, ran: true, available: data.available, passed: data.passed, steps: data.steps, reason: data.reason });
+    } catch {
+      setE2e({ running: false, ran: true, available: false, reason: "Erreur d'exécution." });
+    }
+  }
+
+  async function runMonkeyTest() {
+    if (!gen || monkey.running) return;
+    setMonkey({ running: true });
+    try {
+      const res = await fetch("/api/monkey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: gen.id }),
+      });
+      const data = await res.json();
+      setMonkey({ running: false, ran: true, interactions: data.interactions, errors: data.errors, passed: data.passed });
+    } catch {
+      setMonkey({ running: false, ran: true, passed: false, errors: ["Erreur d'exécution."] });
     }
   }
 
@@ -494,6 +533,93 @@ export default function StudioPage() {
                         </ul>
                       )}
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Porte QA : E2E Playwright (vrai navigateur) */}
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-white">
+                      🎭 Porte QA — E2E (Playwright, vrai navigateur)
+                    </h3>
+                    <p className="text-xs text-white/40">
+                      Démarre l&apos;app générée et joue le scénario <code>e2e.json</code> dans Chromium.
+                    </p>
+                  </div>
+                  <button
+                    onClick={runE2e}
+                    disabled={e2e.running}
+                    className="shrink-0 rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/5 disabled:opacity-50"
+                  >
+                    {e2e.running ? "Exécution…" : "Lancer l'E2E"}
+                  </button>
+                </div>
+                {e2e.ran && e2e.available === false && (
+                  <p className="mt-3 text-xs text-white/40">{e2e.reason}</p>
+                )}
+                {e2e.ran && e2e.available && (
+                  <div className="mt-3">
+                    <span
+                      className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${
+                        e2e.passed ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"
+                      }`}
+                    >
+                      {e2e.passed ? "✓ Scénario validé" : "✕ Échec du scénario"}
+                    </span>
+                    <ul className="mt-3 space-y-1">
+                      {e2e.steps?.map((s, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-white/60">
+                          <span className={s.passed ? "text-emerald-400" : "text-red-400"}>
+                            {s.passed ? "✓" : "✕"}
+                          </span>
+                          <span>
+                            {s.desc}
+                            {s.error && <span className="text-red-300/70"> — {s.error}</span>}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Porte QA : Monkey testing */}
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-white">
+                      🐒 Porte QA — Monkey testing
+                    </h3>
+                    <p className="text-xs text-white/40">
+                      Interactions aléatoires dans le navigateur pour détecter crashs et erreurs JS.
+                    </p>
+                  </div>
+                  <button
+                    onClick={runMonkeyTest}
+                    disabled={monkey.running}
+                    className="shrink-0 rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/5 disabled:opacity-50"
+                  >
+                    {monkey.running ? "Singe au travail…" : "Lâcher le singe"}
+                  </button>
+                </div>
+                {monkey.ran && (
+                  <div className="mt-3">
+                    <span
+                      className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${
+                        monkey.passed ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"
+                      }`}
+                    >
+                      {monkey.passed
+                        ? `✓ Aucun crash (${monkey.interactions} interactions)`
+                        : `✕ ${monkey.errors?.length ?? 0} erreur(s) détectée(s)`}
+                    </span>
+                    {monkey.errors && monkey.errors.length > 0 && (
+                      <pre className="mt-3 max-h-40 overflow-auto rounded-lg bg-black/50 p-3 text-xs text-red-200/80">
+                        {monkey.errors.join("\n")}
+                      </pre>
+                    )}
                   </div>
                 )}
               </div>
