@@ -1,10 +1,14 @@
-// Utilise les navigateurs Playwright pré-installés de l'environnement.
-process.env.PLAYWRIGHT_BROWSERS_PATH ??= "/opt/pw-browsers";
-
 import { chromium } from "playwright";
-import { promises as fs } from "node:fs";
+import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";
 import { startApp, stopApp } from "./appServer";
+
+// Utilise les navigateurs pré-installés du sandbox/Docker s'ils existent ;
+// sinon, laisse Playwright utiliser son emplacement par défaut (dev local Mac/Win).
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH && existsSync("/opt/pw-browsers")) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = "/opt/pw-browsers";
+}
+
 
 const ROOT = path.join(process.cwd(), ".neora-workspace");
 

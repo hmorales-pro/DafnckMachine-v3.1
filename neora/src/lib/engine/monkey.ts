@@ -1,7 +1,11 @@
-process.env.PLAYWRIGHT_BROWSERS_PATH ??= "/opt/pw-browsers";
-
 import { chromium } from "playwright";
+import { existsSync } from "node:fs";
 import { startApp, stopApp } from "./appServer";
+
+// Navigateurs pré-installés (sandbox/Docker) si présents ; sinon défaut Playwright.
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH && existsSync("/opt/pw-browsers")) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = "/opt/pw-browsers";
+}
 
 export type MonkeyResult = {
   interactions: number;
