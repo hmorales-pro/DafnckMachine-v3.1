@@ -75,8 +75,34 @@ function parseProject(text: string): GeneratedProject {
   };
 }
 
+// Cœur métier de démo, en version correcte et en version buggée (pour la démo
+// d'auto-réparation : le bug fait échouer un vrai test, l'agent le corrige).
+export const GOOD_INVOICE = `// Cœur métier généré par Néora.
+// Calcule le total d'une facture (HT, TVA, TTC).
+
+export function lineTotal(item) {
+  if (item.quantity < 0 || item.unitPrice < 0) {
+    throw new Error("Quantité et prix doivent être positifs");
+  }
+  return item.quantity * item.unitPrice;
+}
+
+export function computeInvoice(items, vatRate = 0.2) {
+  const ht = items.reduce((sum, it) => sum + lineTotal(it), 0);
+  const tva = +(ht * vatRate).toFixed(2);
+  const ttc = +(ht + tva).toFixed(2);
+  return { ht: +ht.toFixed(2), tva, ttc };
+}
+`;
+
+// BUG volontaire : la TVA n'est pas appliquée (vatRate = 0) → le test du TTC échoue.
+export const BUGGY_INVOICE = GOOD_INVOICE.replace(
+  "export function computeInvoice(items, vatRate = 0.2) {",
+  "export function computeInvoice(items, vatRate = 0) {"
+);
+
 // Projet de démo (mode sans clé) : réellement exécutable, avec un test qui passe.
-function mockProject(idea: string): GeneratedProject {
+function mockProject(idea: string, invoiceJs: string = GOOD_INVOICE): GeneratedProject {
   return {
     summary: `Cœur métier généré pour : ${idea}. Module de calcul de facturation + tests unitaires natifs.`,
     testCommand: "node --test",
@@ -96,23 +122,7 @@ function mockProject(idea: string): GeneratedProject {
       },
       {
         path: "src/invoice.js",
-        content: `// Cœur métier généré par Néora.
-// Calcule le total d'une facture (HT, TVA, TTC).
-
-export function lineTotal(item) {
-  if (item.quantity < 0 || item.unitPrice < 0) {
-    throw new Error("Quantité et prix doivent être positifs");
-  }
-  return item.quantity * item.unitPrice;
-}
-
-export function computeInvoice(items, vatRate = 0.2) {
-  const ht = items.reduce((sum, it) => sum + lineTotal(it), 0);
-  const tva = +(ht * vatRate).toFixed(2);
-  const ttc = +(ht + tva).toFixed(2);
-  return { ht: +ht.toFixed(2), tva, ttc };
-}
-`,
+        content: invoiceJs,
       },
       {
         path: "src/invoice.test.js",
@@ -216,4 +226,9 @@ server.listen(port, () => console.log("App sur http://localhost:" + port));
       },
     ],
   };
+}
+
+// Construit le projet de démo (mode sans clé), en version correcte ou buggée.
+export function buildMockProject(idea: string, buggy = false): GeneratedProject {
+  return mockProject(idea, buggy ? BUGGY_INVOICE : GOOD_INVOICE);
 }

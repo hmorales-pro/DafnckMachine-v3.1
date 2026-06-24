@@ -19,6 +19,8 @@ type StaticState = { running: boolean; duplication?: Dup; deadCode?: Dead };
 type E2eStep = { desc: string; passed: boolean; error?: string };
 type E2eState = { running: boolean; ran?: boolean; available?: boolean; passed?: boolean; steps?: E2eStep[]; reason?: string };
 type MonkeyState = { running: boolean; ran?: boolean; interactions?: number; errors?: string[]; passed?: boolean };
+type Attempt = { n: number; passed: boolean; output: string; repaired?: string[] };
+type FixState = { running: boolean; ran?: boolean; attempts?: Attempt[]; finalPassed?: boolean };
 
 const EXAMPLES = [
   "Un SaaS de facturation simple pour auto-entrepreneurs",
@@ -47,6 +49,7 @@ export default function StudioPage() {
   const [stat, setStat] = useState<StaticState>({ running: false });
   const [e2e, setE2e] = useState<E2eState>({ running: false });
   const [monkey, setMonkey] = useState<MonkeyState>({ running: false });
+  const [fix, setFix] = useState<FixState>({ running: false });
 
   // Templates : auto-sélection selon l'idée, ajustable par l'utilisateur.
   const [templates, setTemplates] = useState<string[]>([]);
@@ -190,6 +193,26 @@ export default function StudioPage() {
       setMonkey({ running: false, ran: true, interactions: data.interactions, errors: data.errors, passed: data.passed });
     } catch {
       setMonkey({ running: false, ran: true, passed: false, errors: ["Erreur d'exécution."] });
+    }
+  }
+
+  async function runAutofix() {
+    if (fix.running || !idea.trim()) return;
+    setFix({ running: true });
+    const prior: Partial<Record<PhaseId, string>> = {};
+    PHASES_META.forEach((p) => {
+      if (states[p.id].artifact) prior[p.id] = states[p.id].artifact;
+    });
+    try {
+      const res = await fetch("/api/autofix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idea: idea.trim(), prior, templates }),
+      });
+      const data = await res.json();
+      setFix({ running: false, ran: true, attempts: data.attempts, finalPassed: data.finalPassed });
+    } catch {
+      setFix({ running: false, ran: true, attempts: [], finalPassed: false });
     }
   }
 
@@ -657,6 +680,69 @@ export default function StudioPage() {
               ))}
             </div>
           </div>
+        </section>
+      )}
+
+      {/* Boucle d'auto-réparation (cœur agentique) */}
+      {states.blueprint.status === "done" && (
+        <section className="mt-8 rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-white">
+                🔁 Boucle d&apos;auto-réparation
+              </h2>
+              <p className="mt-1 text-sm text-white/50">
+                génère → teste → <strong className="text-white/70">répare</strong> → relance,
+                jusqu&apos;à ce que les tests passent. (En démo, la 1<sup>re</sup> tentative
+                contient un vrai bug que l&apos;agent corrige.)
+              </p>
+            </div>
+            <button
+              onClick={runAutofix}
+              disabled={fix.running}
+              className="shrink-0 rounded-lg bg-gradient-to-r from-violet-500 to-blue-500 px-5 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              {fix.running ? "Réparation en cours…" : "Lancer la boucle"}
+            </button>
+          </div>
+
+          {fix.ran && fix.attempts && (
+            <div className="mt-6">
+              <span
+                className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${
+                  fix.finalPassed ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"
+                }`}
+              >
+                {fix.finalPassed
+                  ? `✓ Réparé en ${fix.attempts.length} tentative(s)`
+                  : "✕ Non résolu"}
+              </span>
+
+              <ol className="mt-4 space-y-3">
+                {fix.attempts.map((a) => (
+                  <li key={a.n} className="rounded-xl border border-white/10 bg-black/30 p-4">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-sm font-medium ${a.passed ? "text-emerald-300" : "text-red-300"}`}
+                      >
+                        {a.passed ? "✓" : "✕"} Tentative {a.n}
+                      </span>
+                      {a.repaired && (
+                        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] text-violet-200">
+                          🔧 réparé : {a.repaired.join(", ")}
+                        </span>
+                      )}
+                    </div>
+                    <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-black/50 p-3 text-xs leading-relaxed text-white/60">
+                      {a.output.split("\n").filter((l) =>
+                        /pass|fail|tests|✔|✖|not ok|ok |Error|Expected|actual/i.test(l)
+                      ).slice(0, 10).join("\n") || a.output.slice(0, 400)}
+                    </pre>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </section>
       )}
     </main>
