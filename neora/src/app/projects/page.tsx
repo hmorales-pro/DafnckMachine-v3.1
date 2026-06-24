@@ -18,16 +18,34 @@ export default function ProjectsPage() {
   const [backend, setBackend] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [authed, setAuthed] = useState<boolean | null>(null);
 
   useEffect(() => {
-    fetch("/api/projects")
+    fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((d) => {
-        setProjects(d.projects ?? []);
-        setBackend(d.backend ?? "");
-      })
-      .finally(() => setLoading(false));
+      .then((me) => {
+        if (!me.user) {
+          setAuthed(false);
+          setLoading(false);
+          return;
+        }
+        setAuthed(true);
+        setEmail(me.user.email);
+        return fetch("/api/projects")
+          .then((r) => r.json())
+          .then((d) => {
+            setProjects(d.projects ?? []);
+            setBackend(d.backend ?? "");
+          })
+          .finally(() => setLoading(false));
+      });
   }, []);
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/";
+  }
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
@@ -35,11 +53,19 @@ export default function ProjectsPage() {
         <Link href="/studio" className="text-sm text-white/40 transition hover:text-white">
           ← Studio
         </Link>
-        {backend && (
-          <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/40">
-            backend : {backend}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {email && <span className="text-xs text-white/40">{email}</span>}
+          {backend && (
+            <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/40">
+              backend : {backend}
+            </span>
+          )}
+          {authed && (
+            <button onClick={logout} className="text-xs text-white/50 transition hover:text-white">
+              Déconnexion
+            </button>
+          )}
+        </div>
       </div>
 
       <h1 className="mt-4 text-3xl font-bold text-white">📁 Mes projets</h1>
@@ -47,6 +73,16 @@ export default function ProjectsPage() {
 
       {loading ? (
         <p className="mt-8 text-white/40">Chargement…</p>
+      ) : authed === false ? (
+        <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+          <p className="text-white/50">Connectez-vous pour voir vos projets.</p>
+          <Link
+            href="/login"
+            className="mt-4 inline-block rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-black transition hover:bg-white/90"
+          >
+            Se connecter
+          </Link>
+        </div>
       ) : projects.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
           <p className="text-white/50">Aucun projet sauvegardé pour l&apos;instant.</p>

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { saveProject, listProjects, usingSupabase } from "@/lib/db/store";
+import { userIdFromRequest } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
-// Utilisateur de démo tant que l'auth Supabase n'est pas branchée.
-const DEMO_USER = "00000000-0000-0000-0000-000000000000";
-
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const userId = userIdFromRequest(req);
+  if (!userId) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
   try {
-    const projects = await listProjects(DEMO_USER);
+    const projects = await listProjects(userId);
     return NextResponse.json({ projects, backend: usingSupabase ? "supabase" : "local" });
   } catch (err) {
     return NextResponse.json(
@@ -19,6 +19,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const userId = userIdFromRequest(req);
+  if (!userId) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
   try {
     const body = (await req.json()) as {
       idea: string;
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Idée manquante." }, { status: 400 });
     }
     const saved = await saveProject({
-      userId: DEMO_USER,
+      userId,
       idea: body.idea.trim(),
       summary: body.summary ?? "",
       templates: body.templates ?? [],

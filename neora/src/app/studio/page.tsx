@@ -50,7 +50,7 @@ export default function StudioPage() {
   const [e2e, setE2e] = useState<E2eState>({ running: false });
   const [monkey, setMonkey] = useState<MonkeyState>({ running: false });
   const [fix, setFix] = useState<FixState>({ running: false });
-  const [save, setSave] = useState<{ saving: boolean; saved?: boolean; backend?: string }>({ saving: false });
+  const [save, setSave] = useState<{ saving: boolean; saved?: boolean; backend?: string; needAuth?: boolean }>({ saving: false });
 
   // Templates : auto-sélection selon l'idée, ajustable par l'utilisateur.
   const [templates, setTemplates] = useState<string[]>([]);
@@ -237,6 +237,10 @@ export default function StudioPage() {
           },
         }),
       });
+      if (res.status === 401) {
+        setSave({ saving: false, needAuth: true });
+        return;
+      }
       const data = await res.json();
       setSave({ saving: false, saved: !data.error, backend: data.backend });
     } catch {
@@ -462,6 +466,11 @@ export default function StudioPage() {
                     <span className="text-xs text-emerald-300">
                       ✓ Enregistré ({save.backend})
                     </span>
+                  )}
+                  {save.needAuth && (
+                    <Link href="/login" className="text-xs text-violet-300 hover:text-violet-200">
+                      Connectez-vous pour sauvegarder →
+                    </Link>
                   )}
                 </div>
               </div>
