@@ -50,12 +50,23 @@ export async function generateProject(
 }
 
 function parseProject(text: string): GeneratedProject {
-  // Extrait le premier objet JSON de la réponse.
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("Réponse de génération non parsable.");
-  const parsed = JSON.parse(text.slice(start, end + 1)) as Partial<GeneratedProject>;
-  if (!parsed.files?.length) throw new Error("Aucun fichier généré.");
+  // Retire d'éventuels blocs ```json ... ``` puis isole l'objet JSON.
+  const cleaned = text.replace(/```(?:json)?/gi, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start === -1 || end === -1) {
+    throw new Error(`Le modèle n'a pas renvoyé de JSON exploitable. Début reçu : « ${text.slice(0, 160)}… »`);
+  }
+  let parsed: Partial<GeneratedProject>;
+  try {
+    parsed = JSON.parse(cleaned.slice(start, end + 1)) as Partial<GeneratedProject>;
+  } catch {
+    throw new Error(
+      "JSON invalide ou tronqué renvoyé par le modèle (essayez un modèle plus capable pour codegen, " +
+        "ou réduisez la taille du projet)."
+    );
+  }
+  if (!parsed.files?.length) throw new Error("Le modèle n'a généré aucun fichier.");
   return {
     summary: parsed.summary ?? "Projet généré.",
     testCommand: parsed.testCommand ?? "node --test",

@@ -63,6 +63,7 @@ export default function StudioPage() {
     calls: number;
   } | null>(null);
   const [showRoutes, setShowRoutes] = useState(false);
+  const [flowError, setFlowError] = useState<string | null>(null);
   const refreshUsage = () =>
     fetch("/api/usage")
       .then((r) => r.json())
@@ -103,6 +104,7 @@ export default function StudioPage() {
     setStates(fresh);
     setGen(null);
     setQa({ running: false });
+    setFlowError(null);
 
     try {
       const res = await fetch("/api/build/stream", {
@@ -149,7 +151,8 @@ export default function StudioPage() {
           }
         }
       }
-    } catch {
+    } catch (e) {
+      setFlowError(`Construction : ${e instanceof Error ? e.message : "échec du flux"}`);
       setStates((s) => {
         const next = { ...s };
         for (const p of PHASES_META) if (next[p.id].status === "running") next[p.id] = { status: "error" };
@@ -179,12 +182,13 @@ export default function StudioPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idea: idea.trim(), prior, templates }),
       });
-      if (!res.ok) throw new Error();
-      const data = (await res.json()) as GenResult;
-      setGen(data);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Erreur ${res.status}`);
+      setGen(data as GenResult);
       setOpenFile(data.files[0]?.path ?? null);
-    } catch {
+    } catch (e) {
       setGen(null);
+      setFlowError(`Génération du code : ${e instanceof Error ? e.message : "échec"}`);
     } finally {
       setGenerating(false);
       refreshUsage();
@@ -379,6 +383,15 @@ export default function StudioPage() {
           dossier de conception complet et exploitable.
         </p>
       </header>
+
+      {flowError && (
+        <div className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <span>⚠️ {flowError}</span>
+          <button onClick={() => setFlowError(null)} className="text-red-300/70 hover:text-red-200">
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Saisie de l'idée */}
       <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">

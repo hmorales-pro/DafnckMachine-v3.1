@@ -125,7 +125,7 @@ export async function generateReply(task: Task, system: string, messages: ChatMe
   const client = clientFor(provider);
 
   if (client instanceof Anthropic) {
-    const r = await client.messages.create({ model, max_tokens: 4096, system, messages });
+    const r = await client.messages.create({ model, max_tokens: 8192, system, messages });
     recordUsage(provider, model, r.usage.input_tokens, r.usage.output_tokens);
     return r.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
@@ -160,7 +160,7 @@ export async function* streamReply(task: Task, system: string, messages: ChatMes
   const client = clientFor(provider);
 
   if (client instanceof Anthropic) {
-    const stream = client.messages.stream({ model, max_tokens: 4096, system, messages });
+    const stream = client.messages.stream({ model, max_tokens: 8192, system, messages });
     for await (const ev of stream) {
       if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") yield ev.delta.text;
     }
