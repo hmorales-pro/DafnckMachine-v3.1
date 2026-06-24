@@ -3,51 +3,112 @@ import OpenAI from "openai";
 import { recordUsage, estTokens } from "./usage";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Couche LLM multi-fournisseurs.
-// Anthropic via son SDK ; OpenAI / Mistral / Groq / Gemini via l'API compatible
-// OpenAI (un seul connecteur). Sélection par variables d'environnement :
-//   LLM_PROVIDER = anthropic | openai | mistral | groq | gemini   (défaut anthropic)
-//   LLM_MODEL    = override du modèle par défaut du fournisseur
-//   <PROVIDER>_API_KEY = la clé correspondante
+// Couche LLM multi-fournisseurs avec ROUTAGE PAR TÂCHE.
+// On configure plusieurs clés ; le routeur choisit le modèle selon la tâche :
+//   - tâches « cheap »  (chat, conception, revue)  → modèle économique
+//   - tâches « strong » (génération de code, réparation) → modèle puissant
+//
+// Variables d'environnement :
+//   <PROVIDER>_API_KEY            active un fournisseur
+//   LLM_ROUTE_<TASK>=provider[:model]  surcharge la route d'une tâche
+//        TASK ∈ CHAT | DESIGN | CODEGEN | REPAIR | REVIEW
+//   LLM_PROVIDER (+ LLM_MODEL)    force un fournisseur unique pour tout (legacy)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 export type ProviderId = "anthropic" | "openai" | "mistral" | "groq" | "gemini";
+export type Task = "chat" | "design" | "codegen" | "repair" | "review";
 
-const CONFIG: Record<ProviderId, { keyEnv: string; baseURL?: string; defaultModel: string }> = {
-  anthropic: { keyEnv: "ANTHROPIC_API_KEY", defaultModel: "claude-opus-4-8" },
-  openai: { keyEnv: "OPENAI_API_KEY", baseURL: "https://api.openai.com/v1", defaultModel: "gpt-4o" },
-  mistral: { keyEnv: "MISTRAL_API_KEY", baseURL: "https://api.mistral.ai/v1", defaultModel: "mistral-large-latest" },
-  groq: { keyEnv: "GROQ_API_KEY", baseURL: "https://api.groq.com/openai/v1", defaultModel: "llama-3.3-70b-versatile" },
+type Tier = "cheap" | "strong";
+const TASK_TIER: Record<Task, Tier> = {
+  chat: "cheap",
+  design: "cheap",
+  review: "cheap",
+  codegen: "strong",
+  repair: "strong",
+};
+
+type Cfg = { keyEnv: string; altKeyEnv?: string; baseURL?: string; strong: string; cheap: string };
+const CONFIG: Record<ProviderId, Cfg> = {
+  anthropic: { keyEnv: "ANTHROPIC_API_KEY", strong: "claude-opus-4-8", cheap: "claude-haiku-4-5-20251001" },
+  openai: { keyEnv: "OPENAI_API_KEY", baseURL: "https://api.openai.com/v1", strong: "gpt-4o", cheap: "gpt-4o-mini" },
+  mistral: { keyEnv: "MISTRAL_API_KEY", baseURL: "https://api.mistral.ai/v1", strong: "mistral-large-latest", cheap: "codestral-latest" },
+  groq: { keyEnv: "GROQ_API_KEY", baseURL: "https://api.groq.com/openai/v1", strong: "llama-3.3-70b-versatile", cheap: "llama-3.3-70b-versatile" },
   gemini: {
     keyEnv: "GEMINI_API_KEY",
+    altKeyEnv: "GOOGLE_API_KEY",
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    defaultModel: "gemini-2.0-flash",
+    strong: "gemini-1.5-pro",
+    cheap: "gemini-2.0-flash",
   },
 };
 
-const providerId = ((process.env.LLM_PROVIDER ?? "anthropic").toLowerCase() as ProviderId);
-const cfg = CONFIG[providerId] ?? CONFIG.anthropic;
-const apiKey =
-  process.env[cfg.keyEnv] ?? (providerId === "gemini" ? process.env.GOOGLE_API_KEY : undefined);
+// Ordre de préférence : qualité pour les tâches « strong », coût pour « cheap ».
+const STRONG_ORDER: ProviderId[] = ["anthropic", "openai", "mistral", "groq", "gemini"];
+const CHEAP_ORDER: ProviderId[] = ["gemini", "groq", "mistral", "openai", "anthropic"];
 
-export const MODEL = process.env.LLM_MODEL ?? cfg.defaultModel;
-export const hasRealKey = Boolean(apiKey);
-export const providerInfo = { id: providerId, model: MODEL, hasKey: hasRealKey };
+const PROVIDERS = Object.keys(CONFIG) as ProviderId[];
 
-const anthropic = providerId === "anthropic" && apiKey ? new Anthropic({ apiKey }) : null;
-const openai =
-  providerId !== "anthropic" && apiKey ? new OpenAI({ apiKey, baseURL: cfg.baseURL }) : null;
+function keyFor(p: ProviderId): string | undefined {
+  const c = CONFIG[p];
+  return process.env[c.keyEnv] ?? (c.altKeyEnv ? process.env[c.altKeyEnv] : undefined);
+}
 
-// Les fournisseurs qui renvoient l'usage tokens en mode streaming.
-const STREAM_USAGE = providerId === "openai" || providerId === "groq";
+const available = PROVIDERS.filter((p) => keyFor(p));
+export const hasRealKey = available.length > 0;
+
+const clients: Partial<Record<ProviderId, Anthropic | OpenAI>> = {};
+function clientFor(p: ProviderId): Anthropic | OpenAI {
+  if (!clients[p]) {
+    const apiKey = keyFor(p)!;
+    clients[p] = p === "anthropic" ? new Anthropic({ apiKey }) : new OpenAI({ apiKey, baseURL: CONFIG[p].baseURL });
+  }
+  return clients[p]!;
+}
+
+function parseOverride(task: Task): { provider: ProviderId; model: string } | null {
+  const raw = process.env[`LLM_ROUTE_${task.toUpperCase()}`];
+  if (!raw) return null;
+  const [provider, model] = raw.split(":") as [ProviderId, string?];
+  if (!CONFIG[provider]) return null;
+  return { provider, model: model ?? CONFIG[provider][TASK_TIER[task]] };
+}
+
+export function resolveRoute(task: Task): { provider: ProviderId; model: string } | null {
+  const tier = TASK_TIER[task];
+
+  // 1. Surcharge explicite par tâche.
+  const ov = parseOverride(task);
+  if (ov && available.includes(ov.provider)) return ov;
+
+  // 2. Mode fournisseur unique forcé (legacy).
+  const forced = process.env.LLM_PROVIDER?.toLowerCase() as ProviderId | undefined;
+  if (forced && available.includes(forced)) {
+    return { provider: forced, model: process.env.LLM_MODEL ?? CONFIG[forced][tier] };
+  }
+
+  // 3. Routage automatique selon le tier, parmi les fournisseurs disponibles.
+  const order = tier === "strong" ? STRONG_ORDER : CHEAP_ORDER;
+  const provider = order.find((p) => available.includes(p));
+  if (!provider) return null;
+  return { provider, model: CONFIG[provider][tier] };
+}
+
+// Récapitulatif du routage (pour l'UI / l'endpoint usage).
+export function getRouting() {
+  const tasks: Task[] = ["chat", "design", "codegen", "repair", "review"];
+  const routes = Object.fromEntries(tasks.map((t) => [t, resolveRoute(t)]));
+  return { available, routes, hasKey: hasRealKey };
+}
+
+const STREAM_USAGE = (p: ProviderId) => p === "openai" || p === "groq";
 
 function mock(messages: ChatMessage[]): string {
   const last = [...messages].reverse().find((m) => m.role === "user");
   return (
     `⚙️ **Mode démo (aucune clé LLM configurée)**\n\n` +
     `Demande reçue :\n> ${last?.content ?? "—"}\n\n` +
-    `Configurez \`LLM_PROVIDER\` + la clé correspondante pour une vraie génération.`
+    `Configurez au moins une clé fournisseur pour une vraie génération.`
   );
 }
 
@@ -57,56 +118,62 @@ function chunk(text: string, size = 28): string[] {
   return out;
 }
 
-export async function generateReply(system: string, messages: ChatMessage[]): Promise<string> {
-  if (!hasRealKey) return mock(messages);
+export async function generateReply(task: Task, system: string, messages: ChatMessage[]): Promise<string> {
+  const route = resolveRoute(task);
+  if (!route) return mock(messages);
+  const { provider, model } = route;
+  const client = clientFor(provider);
 
-  if (anthropic) {
-    const r = await anthropic.messages.create({ model: MODEL, max_tokens: 4096, system, messages });
-    recordUsage(providerId, MODEL, r.usage.input_tokens, r.usage.output_tokens);
+  if (client instanceof Anthropic) {
+    const r = await client.messages.create({ model, max_tokens: 4096, system, messages });
+    recordUsage(provider, model, r.usage.input_tokens, r.usage.output_tokens);
     return r.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("");
   }
 
-  const r = await openai!.chat.completions.create({
-    model: MODEL,
+  const r = await client.chat.completions.create({
+    model,
     messages: [{ role: "system", content: system }, ...messages],
   });
   const u = r.usage;
   recordUsage(
-    providerId,
-    MODEL,
+    provider,
+    model,
     u?.prompt_tokens ?? estTokens(system + JSON.stringify(messages)),
     u?.completion_tokens ?? estTokens(r.choices[0]?.message?.content ?? "")
   );
   return r.choices[0]?.message?.content ?? "";
 }
 
-export async function* streamReply(system: string, messages: ChatMessage[]): AsyncGenerator<string> {
-  if (!hasRealKey) {
+export async function* streamReply(task: Task, system: string, messages: ChatMessage[]): AsyncGenerator<string> {
+  const route = resolveRoute(task);
+  if (!route) {
     for (const c of chunk(mock(messages))) {
       yield c;
       await new Promise((r) => setTimeout(r, 12));
     }
     return;
   }
+  const { provider, model } = route;
+  const client = clientFor(provider);
 
-  if (anthropic) {
-    const stream = anthropic.messages.stream({ model: MODEL, max_tokens: 4096, system, messages });
+  if (client instanceof Anthropic) {
+    const stream = client.messages.stream({ model, max_tokens: 4096, system, messages });
     for await (const ev of stream) {
       if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") yield ev.delta.text;
     }
     const final = await stream.finalMessage();
-    recordUsage(providerId, MODEL, final.usage.input_tokens, final.usage.output_tokens);
+    recordUsage(provider, model, final.usage.input_tokens, final.usage.output_tokens);
     return;
   }
 
-  const stream = await openai!.chat.completions.create({
-    model: MODEL,
+  const stream = await client.chat.completions.create({
+    model,
     messages: [{ role: "system", content: system }, ...messages],
     stream: true,
-    ...(STREAM_USAGE ? { stream_options: { include_usage: true } } : {}),
+    ...(STREAM_USAGE(provider) ? { stream_options: { include_usage: true } } : {}),
   });
   let out = "";
   let usage: { prompt_tokens?: number; completion_tokens?: number } | null = null;
@@ -119,12 +186,9 @@ export async function* streamReply(system: string, messages: ChatMessage[]): Asy
     if (part.usage) usage = part.usage;
   }
   recordUsage(
-    providerId,
-    MODEL,
+    provider,
+    model,
     usage?.prompt_tokens ?? estTokens(system + JSON.stringify(messages)),
     usage?.completion_tokens ?? estTokens(out)
   );
 }
-
-// Alias de compatibilité.
-export const generateAgentReply = generateReply;

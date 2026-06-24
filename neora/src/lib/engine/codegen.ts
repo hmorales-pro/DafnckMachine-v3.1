@@ -37,7 +37,7 @@ export async function generateProject(
     .map(([k, v]) => `### ${k}\n${v}`)
     .join("\n\n");
 
-  const text = await generateReply(SYSTEM, [
+  const text = await generateReply("codegen", SYSTEM, [
     {
       role: "user",
       content:

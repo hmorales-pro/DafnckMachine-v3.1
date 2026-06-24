@@ -1,9 +1,7 @@
 import { costUSD } from "./pricing";
 
-// Accumulateur d'usage tokens + coût estimé (en mémoire du process).
-// Suffisant pour une estimation de dev « pour moi ». Repart à zéro au redémarrage.
-export type UsageTotals = {
-  provider: string;
+// Accumulateur d'usage tokens + coût estimé, ventilé par modèle (en mémoire).
+export type ModelUsage = {
   model: string;
   inputTokens: number;
   outputTokens: number;
@@ -11,33 +9,28 @@ export type UsageTotals = {
   costUSD: number;
 };
 
-const totals: UsageTotals = {
-  provider: "",
-  model: "",
-  inputTokens: 0,
-  outputTokens: 0,
-  calls: 0,
-  costUSD: 0,
-};
+const byModel: Record<string, ModelUsage> = {};
 
 export function recordUsage(provider: string, model: string, inputTokens: number, outputTokens: number) {
-  totals.provider = provider;
-  totals.model = model;
-  totals.inputTokens += inputTokens;
-  totals.outputTokens += outputTokens;
-  totals.calls += 1;
-  totals.costUSD += costUSD(model, inputTokens, outputTokens);
+  const key = `${provider}/${model}`;
+  const u = (byModel[key] ??= { model: key, inputTokens: 0, outputTokens: 0, calls: 0, costUSD: 0 });
+  u.inputTokens += inputTokens;
+  u.outputTokens += outputTokens;
+  u.calls += 1;
+  u.costUSD += costUSD(model, inputTokens, outputTokens);
 }
 
-export function getUsage(): UsageTotals {
-  return { ...totals };
+export function getUsage() {
+  const models = Object.values(byModel);
+  return {
+    models,
+    totalCostUSD: models.reduce((s, m) => s + m.costUSD, 0),
+    totalCalls: models.reduce((s, m) => s + m.calls, 0),
+  };
 }
 
 export function resetUsage() {
-  totals.inputTokens = 0;
-  totals.outputTokens = 0;
-  totals.calls = 0;
-  totals.costUSD = 0;
+  for (const k of Object.keys(byModel)) delete byModel[k];
 }
 
 // Estimation grossière du nombre de tokens (~4 caractères par token).

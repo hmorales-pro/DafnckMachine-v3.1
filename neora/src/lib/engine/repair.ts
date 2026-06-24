@@ -21,7 +21,7 @@ export async function repairProject(
     .join("\n\n")
     .slice(0, 14000);
 
-  const text = await generateReply(SYSTEM, [
+  const text = await generateReply("repair", SYSTEM, [
     {
       role: "user",
       content:

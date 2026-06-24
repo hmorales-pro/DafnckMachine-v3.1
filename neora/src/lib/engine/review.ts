@@ -25,7 +25,7 @@ export async function reviewCode(
     .map((f) => `--- ${f.path} ---\n${f.content}`)
     .join("\n\n")
     .slice(0, 12000);
-  return generateReply(SYSTEM, [
+  return generateReply("review", SYSTEM, [
     {
       role: "user",
       content: `Idée : "${idea}".\n\nVoici les fichiers générés. Fais-en la revue :\n\n${bundle}`,

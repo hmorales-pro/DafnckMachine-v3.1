@@ -169,7 +169,7 @@ export async function runPhase(
   if (!phase) throw new Error(`Phase inconnue : ${id}`);
   // En mode démo (sans clé), on renvoie un livrable spécifique à la phase.
   if (!hasRealKey) return phase.mock(idea);
-  return generateReply(phase.system, [
+  return generateReply("design", phase.system, [
     { role: "user", content: phase.user(idea, prior) },
   ]);
 }
@@ -198,5 +198,5 @@ export async function* runPhaseStream(
     return;
   }
 
-  yield* streamReply(phase.system, [{ role: "user", content: phase.user(idea, prior) }]);
+  yield* streamReply("design", phase.system, [{ role: "user", content: phase.user(idea, prior) }]);
 }

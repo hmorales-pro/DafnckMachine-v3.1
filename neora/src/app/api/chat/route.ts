@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAgent } from "@/lib/agents";
-import { generateAgentReply, hasRealKey, type ChatMessage } from "@/lib/llm";
+import { generateReply, hasRealKey, type ChatMessage } from "@/lib/llm";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Aucun message fourni" }, { status: 400 });
     }
 
-    const reply = await generateAgentReply(agent.systemPrompt, messages);
+    const reply = await generateReply("chat", agent.systemPrompt, messages);
 
     return NextResponse.json({ reply, mock: !hasRealKey });
   } catch (err) {

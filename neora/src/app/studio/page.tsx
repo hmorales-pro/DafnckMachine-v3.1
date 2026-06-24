@@ -54,24 +54,25 @@ export default function StudioPage() {
   const [fix, setFix] = useState<FixState>({ running: false });
   const [save, setSave] = useState<{ saving: boolean; saved?: boolean; backend?: string; needAuth?: boolean }>({ saving: false });
 
-  // Suivi du fournisseur LLM + coût estimé.
+  // Suivi du routage LLM + coût estimé.
   const [usage, setUsage] = useState<{
-    provider: string;
-    model: string;
     hasKey: boolean;
+    available: string[];
+    routes: Record<string, { provider: string; model: string } | null>;
     costUSD: number;
     calls: number;
   } | null>(null);
+  const [showRoutes, setShowRoutes] = useState(false);
   const refreshUsage = () =>
     fetch("/api/usage")
       .then((r) => r.json())
       .then((d) =>
         setUsage({
-          provider: d.provider,
-          model: d.model,
           hasKey: d.hasKey,
-          costUSD: d.usage.costUSD,
-          calls: d.usage.calls,
+          available: d.available ?? [],
+          routes: d.routes ?? {},
+          costUSD: d.usage?.totalCostUSD ?? 0,
+          calls: d.usage?.totalCalls ?? 0,
         })
       )
       .catch(() => {});
@@ -336,18 +337,39 @@ export default function StudioPage() {
             ⚙️ Moteur DafnckMachine · 6 agents en pipeline
           </div>
           {usage && (
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
-              🧠 {usage.provider}/{usage.model}
+            <button
+              onClick={() => setShowRoutes((v) => !v)}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60 transition hover:border-white/25"
+            >
               {usage.hasKey ? (
-                <span className="text-emerald-300/80">
-                  · ~${usage.costUSD.toFixed(4)} ({usage.calls} appels)
-                </span>
+                <>
+                  🧠 routage actif ({usage.available.length} fournisseur
+                  {usage.available.length > 1 ? "s" : ""})
+                  <span className="text-emerald-300/80">
+                    · ~${usage.costUSD.toFixed(4)} ({usage.calls} appels)
+                  </span>
+                </>
               ) : (
-                <span className="text-amber-300/80">· mode démo</span>
+                <span className="text-amber-300/80">🧠 mode démo (aucune clé)</span>
               )}
-            </div>
+            </button>
           )}
         </div>
+        {showRoutes && usage && (
+          <div className="mt-2 rounded-xl border border-white/10 bg-black/30 p-3 text-xs">
+            <p className="mb-2 text-white/40">Routage par tâche :</p>
+            <ul className="grid gap-1 sm:grid-cols-2">
+              {Object.entries(usage.routes).map(([task, r]) => (
+                <li key={task} className="flex justify-between gap-2">
+                  <span className="text-white/50">{task}</span>
+                  <span className="text-white/70">
+                    {r ? `${r.provider} · ${r.model}` : "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <h1 className="mt-4 text-3xl font-bold text-white sm:text-4xl">
           Studio — transformez une idée en logiciel
         </h1>

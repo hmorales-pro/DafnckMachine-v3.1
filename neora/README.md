@@ -62,7 +62,23 @@ Choisissez le fournisseur via `LLM_PROVIDER` + la clé correspondante :
 | `gemini`       | `GEMINI_API_KEY`    | gemini-2.0-flash       |
 
 OpenAI / Mistral / Groq / Gemini passent par l'API compatible OpenAI (un seul
-connecteur). `LLM_MODEL` force un modèle précis.
+connecteur).
+
+### Routage par tâche (optimisation du coût)
+
+Renseignez **plusieurs clés** : le routeur choisit automatiquement le modèle
+selon la tâche — léger pour le chat/la conception/la revue, puissant pour la
+génération de code et la réparation.
+
+| Tâche | Tier | Exemple (Gemini + Anthropic) |
+|-------|------|------------------------------|
+| chat, design, review | économique | Gemini 2.0 Flash |
+| codegen, repair | puissant | Claude Opus 4.8 |
+
+Surcharge fine par tâche : `LLM_ROUTE_CODEGEN=anthropic:claude-opus-4-8`,
+`LLM_ROUTE_CHAT=gemini:gemini-2.0-flash` (TASK ∈ CHAT/DESIGN/CODEGEN/REPAIR/REVIEW).
+Pour forcer un fournisseur unique : `LLM_PROVIDER` (+ `LLM_MODEL`).
+Le routage actif est visible dans le Studio et via `GET /api/usage`.
 
 ### Estimation de coût
 
