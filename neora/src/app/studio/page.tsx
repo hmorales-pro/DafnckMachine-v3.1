@@ -19,7 +19,8 @@ type StaticState = { running: boolean; duplication?: Dup; deadCode?: Dead };
 type E2eStep = { desc: string; passed: boolean; error?: string };
 type E2eState = { running: boolean; ran?: boolean; available?: boolean; passed?: boolean; steps?: E2eStep[]; reason?: string };
 type MonkeyState = { running: boolean; ran?: boolean; interactions?: number; errors?: string[]; passed?: boolean };
-type Attempt = { n: number; passed: boolean; output: string; repaired?: string[] };
+type GateResult = { id: string; name: string; passed: boolean; report: string };
+type Attempt = { n: number; passed: boolean; gates: GateResult[]; repaired?: string[] };
 type FixState = { running: boolean; ran?: boolean; attempts?: Attempt[]; finalPassed?: boolean };
 
 const EXAMPLES = [
@@ -824,11 +825,30 @@ export default function StudioPage() {
                         </span>
                       )}
                     </div>
-                    <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-black/50 p-3 text-xs leading-relaxed text-white/60">
-                      {a.output.split("\n").filter((l) =>
-                        /pass|fail|tests|✔|✖|not ok|ok |Error|Expected|actual/i.test(l)
-                      ).slice(0, 10).join("\n") || a.output.slice(0, 400)}
-                    </pre>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {a.gates.map((g) => (
+                        <span
+                          key={g.id}
+                          title={g.report}
+                          className={`rounded-full px-2.5 py-1 text-xs ${
+                            g.passed
+                              ? "bg-emerald-500/15 text-emerald-300"
+                              : "bg-red-500/15 text-red-300"
+                          }`}
+                        >
+                          {g.passed ? "✓" : "✕"} {g.name}
+                        </span>
+                      ))}
+                    </div>
+                    {a.gates.some((g) => !g.passed) && (
+                      <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-black/50 p-3 text-xs leading-relaxed text-white/60">
+                        {a.gates
+                          .filter((g) => !g.passed)
+                          .map((g) => `[${g.name}]\n${g.report}`)
+                          .join("\n\n")
+                          .slice(0, 600)}
+                      </pre>
+                    )}
                   </li>
                 ))}
               </ol>
