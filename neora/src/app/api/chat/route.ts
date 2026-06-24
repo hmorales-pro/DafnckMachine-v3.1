@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAgent } from "@/lib/agents";
-import { generateAgentReply, hasRealKey, type ChatMessage } from "@/lib/anthropic";
+import { generateAgentReply, hasRealKey, type ChatMessage } from "@/lib/llm";
 
 export const runtime = "nodejs";
 

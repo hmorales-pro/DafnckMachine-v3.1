@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAutofix } from "@/lib/engine/autofix";
-import { hasRealKey } from "@/lib/anthropic";
+import { hasRealKey } from "@/lib/llm";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;

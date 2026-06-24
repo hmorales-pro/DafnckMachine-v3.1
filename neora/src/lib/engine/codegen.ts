@@ -1,5 +1,4 @@
-import { getClient, hasRealKey, MODEL } from "@/lib/anthropic";
-import type { Anthropic } from "@anthropic-ai/sdk";
+import { generateReply, hasRealKey } from "@/lib/llm";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Générateur de code : transforme les livrables du pipeline en VRAIS fichiers
@@ -32,31 +31,20 @@ export async function generateProject(
   idea: string,
   prior: Record<string, string>
 ): Promise<GeneratedProject> {
-  const client = getClient();
-  if (!hasRealKey || !client) return mockProject(idea);
+  if (!hasRealKey) return mockProject(idea);
 
   const context = Object.entries(prior)
     .map(([k, v]) => `### ${k}\n${v}`)
     .join("\n\n");
 
-  const res = await client.messages.create({
-    model: MODEL,
-    max_tokens: 4096,
-    system: SYSTEM,
-    messages: [
-      {
-        role: "user",
-        content:
-          `Idée : "${idea}".\n\nLivrables de conception :\n${context}\n\n` +
-          `Génère le projet Node.js exécutable correspondant au cœur métier.`,
-      },
-    ],
-  });
-
-  const text = res.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("");
+  const text = await generateReply(SYSTEM, [
+    {
+      role: "user",
+      content:
+        `Idée : "${idea}".\n\nLivrables de conception :\n${context}\n\n` +
+        `Génère le projet Node.js exécutable correspondant au cœur métier.`,
+    },
+  ]);
 
   return parseProject(text);
 }

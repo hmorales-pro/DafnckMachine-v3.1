@@ -1,5 +1,4 @@
-import { getClient, hasRealKey, MODEL } from "@/lib/anthropic";
-import type { Anthropic } from "@anthropic-ai/sdk";
+import { generateReply, hasRealKey } from "@/lib/llm";
 import { GOOD_INVOICE, type GeneratedFile } from "./codegen";
 
 // Agent de réparation (dérivé de debugger-agent de DafnckMachine).
@@ -15,32 +14,21 @@ export async function repairProject(
   files: GeneratedFile[],
   failureOutput: string
 ): Promise<GeneratedFile[]> {
-  const client = getClient();
-  if (!hasRealKey || !client) return mockRepair(files);
+  if (!hasRealKey) return mockRepair(files);
 
   const bundle = files
     .map((f) => `--- ${f.path} ---\n${f.content}`)
     .join("\n\n")
     .slice(0, 14000);
 
-  const res = await client.messages.create({
-    model: MODEL,
-    max_tokens: 4096,
-    system: SYSTEM,
-    messages: [
-      {
-        role: "user",
-        content:
-          `Les tests échouent. Sortie :\n\n${failureOutput.slice(0, 4000)}\n\n` +
-          `Fichiers du projet :\n\n${bundle}\n\nCorrige la cause de l'échec.`,
-      },
-    ],
-  });
-
-  const text = res.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("");
+  const text = await generateReply(SYSTEM, [
+    {
+      role: "user",
+      content:
+        `Les tests échouent. Sortie :\n\n${failureOutput.slice(0, 4000)}\n\n` +
+        `Fichiers du projet :\n\n${bundle}\n\nCorrige la cause de l'échec.`,
+    },
+  ]);
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end === -1) return [];

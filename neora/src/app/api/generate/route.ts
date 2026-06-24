@@ -3,7 +3,7 @@ import { generateProject } from "@/lib/engine/codegen";
 import { getTemplateFiles } from "@/lib/engine/templates";
 import { reviewCode } from "@/lib/engine/review";
 import { writeProject } from "@/lib/engine/workspace";
-import { hasRealKey } from "@/lib/anthropic";
+import { hasRealKey } from "@/lib/llm";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;

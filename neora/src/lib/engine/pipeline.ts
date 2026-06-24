@@ -1,4 +1,4 @@
-import { generateAgentReply, hasRealKey, getClient, MODEL } from "@/lib/anthropic";
+import { generateReply, streamReply, hasRealKey } from "@/lib/llm";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Moteur de production logicielle de Néora.
@@ -169,7 +169,7 @@ export async function runPhase(
   if (!phase) throw new Error(`Phase inconnue : ${id}`);
   // En mode démo (sans clé), on renvoie un livrable spécifique à la phase.
   if (!hasRealKey) return phase.mock(idea);
-  return generateAgentReply(phase.system, [
+  return generateReply(phase.system, [
     { role: "user", content: phase.user(idea, prior) },
   ]);
 }
@@ -198,20 +198,5 @@ export async function* runPhaseStream(
     return;
   }
 
-  const client = getClient();
-  if (!client) {
-    yield phase.mock(idea);
-    return;
-  }
-  const stream = client.messages.stream({
-    model: MODEL,
-    max_tokens: 2048,
-    system: phase.system,
-    messages: [{ role: "user", content: phase.user(idea, prior) }],
-  });
-  for await (const ev of stream) {
-    if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") {
-      yield ev.delta.text;
-    }
-  }
+  yield* streamReply(phase.system, [{ role: "user", content: phase.user(idea, prior) }]);
 }

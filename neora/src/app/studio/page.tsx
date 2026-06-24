@@ -54,6 +54,31 @@ export default function StudioPage() {
   const [fix, setFix] = useState<FixState>({ running: false });
   const [save, setSave] = useState<{ saving: boolean; saved?: boolean; backend?: string; needAuth?: boolean }>({ saving: false });
 
+  // Suivi du fournisseur LLM + coût estimé.
+  const [usage, setUsage] = useState<{
+    provider: string;
+    model: string;
+    hasKey: boolean;
+    costUSD: number;
+    calls: number;
+  } | null>(null);
+  const refreshUsage = () =>
+    fetch("/api/usage")
+      .then((r) => r.json())
+      .then((d) =>
+        setUsage({
+          provider: d.provider,
+          model: d.model,
+          hasKey: d.hasKey,
+          costUSD: d.usage.costUSD,
+          calls: d.usage.calls,
+        })
+      )
+      .catch(() => {});
+  useEffect(() => {
+    refreshUsage();
+  }, []);
+
   // Templates : auto-sélection selon l'idée, ajustable par l'utilisateur.
   const [templates, setTemplates] = useState<string[]>([]);
   const [touchedTemplates, setTouchedTemplates] = useState(false);
@@ -132,6 +157,7 @@ export default function StudioPage() {
     }
 
     setRunning(false);
+    refreshUsage();
   }
 
   async function generate() {
@@ -160,6 +186,7 @@ export default function StudioPage() {
       setGen(null);
     } finally {
       setGenerating(false);
+      refreshUsage();
     }
   }
 
@@ -244,6 +271,8 @@ export default function StudioPage() {
       setFix({ running: false, ran: true, attempts: data.attempts, finalPassed: data.finalPassed });
     } catch {
       setFix({ running: false, ran: true, attempts: [], finalPassed: false });
+    } finally {
+      refreshUsage();
     }
   }
 
@@ -302,8 +331,22 @@ export default function StudioPage() {
     <NavBar />
     <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
       <header className="mt-4">
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
-          ⚙️ Moteur DafnckMachine · 6 agents en pipeline
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
+            ⚙️ Moteur DafnckMachine · 6 agents en pipeline
+          </div>
+          {usage && (
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
+              🧠 {usage.provider}/{usage.model}
+              {usage.hasKey ? (
+                <span className="text-emerald-300/80">
+                  · ~${usage.costUSD.toFixed(4)} ({usage.calls} appels)
+                </span>
+              ) : (
+                <span className="text-amber-300/80">· mode démo</span>
+              )}
+            </div>
+          )}
         </div>
         <h1 className="mt-4 text-3xl font-bold text-white sm:text-4xl">
           Studio — transformez une idée en logiciel

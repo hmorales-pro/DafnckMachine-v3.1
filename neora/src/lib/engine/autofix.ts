@@ -4,7 +4,7 @@ import { repairProject } from "./repair";
 import { writeProject, runTests } from "./workspace";
 import { runE2E } from "./e2e";
 import { runStaticAnalysis } from "./staticAnalysis";
-import { hasRealKey } from "@/lib/anthropic";
+import { hasRealKey } from "@/lib/llm";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Boucle d'auto-réparation — cœur agentique du moteur.

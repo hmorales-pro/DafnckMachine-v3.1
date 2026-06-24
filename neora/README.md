@@ -47,11 +47,29 @@ Pour activer les vraies réponses Claude, créez un `.env` à côté du
 Les comptes et projets sont persistés dans le volume `neora-data`.
 
 Sans clé API, l'application tourne en **mode démo**. Pour activer les vraies
-réponses des agents, ajoutez votre clé dans `.env.local` :
+réponses des agents, ajoutez votre clé dans `.env.local`.
 
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
+## 🧠 Fournisseurs LLM (multi-provider)
+
+Choisissez le fournisseur via `LLM_PROVIDER` + la clé correspondante :
+
+| `LLM_PROVIDER` | Clé           | Modèle par défaut            |
+|----------------|---------------|------------------------------|
+| `anthropic`    | `ANTHROPIC_API_KEY` | claude-opus-4-8        |
+| `openai`       | `OPENAI_API_KEY`    | gpt-4o                 |
+| `mistral`      | `MISTRAL_API_KEY`   | mistral-large-latest   |
+| `groq`         | `GROQ_API_KEY`      | llama-3.3-70b-versatile|
+| `gemini`       | `GEMINI_API_KEY`    | gemini-2.0-flash       |
+
+OpenAI / Mistral / Groq / Gemini passent par l'API compatible OpenAI (un seul
+connecteur). `LLM_MODEL` force un modèle précis.
+
+### Estimation de coût
+
+Le moteur compte les tokens réels et estime le coût (prix indicatifs dans
+`src/lib/llm/pricing.ts`). Coût cumulé visible dans le Studio et via
+`GET /api/usage`. ⚠️ Les prix sont des ordres de grandeur — vérifiez les tarifs
+officiels.
 
 ## 💾 Persistance (Supabase optionnel)
 

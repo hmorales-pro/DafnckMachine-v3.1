@@ -1,4 +1,4 @@
-import { generateAgentReply, hasRealKey } from "@/lib/anthropic";
+import { generateReply, hasRealKey } from "@/lib/llm";
 import type { GeneratedFile } from "./codegen";
 
 // Agent de revue de code (dérivé de code-reviewer-agent de DafnckMachine).
@@ -25,7 +25,7 @@ export async function reviewCode(
     .map((f) => `--- ${f.path} ---\n${f.content}`)
     .join("\n\n")
     .slice(0, 12000);
-  return generateAgentReply(SYSTEM, [
+  return generateReply(SYSTEM, [
     {
       role: "user",
       content: `Idée : "${idea}".\n\nVoici les fichiers générés. Fais-en la revue :\n\n${bundle}`,

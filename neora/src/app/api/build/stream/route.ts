@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { PIPELINE, runPhaseStream, type PhaseId } from "@/lib/engine/pipeline";
-import { hasRealKey } from "@/lib/anthropic";
+import { hasRealKey } from "@/lib/llm";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
