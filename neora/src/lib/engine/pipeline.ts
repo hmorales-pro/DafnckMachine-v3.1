@@ -1,4 +1,4 @@
-import { generateAgentReply, hasRealKey } from "@/lib/anthropic";
+import { generateAgentReply, hasRealKey, getClient, MODEL } from "@/lib/anthropic";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Moteur de production logicielle de Néora.
@@ -172,4 +172,46 @@ export async function runPhase(
   return generateAgentReply(phase.system, [
     { role: "user", content: phase.user(idea, prior) },
   ]);
+}
+
+function chunk(text: string, size = 28): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < text.length; i += size) out.push(text.slice(i, i + size));
+  return out;
+}
+
+/** Exécute une phase en streaming : yield les fragments de texte au fil de l'eau. */
+export async function* runPhaseStream(
+  id: PhaseId,
+  idea: string,
+  prior: Partial<Record<PhaseId, string>>
+): AsyncGenerator<string> {
+  const phase = getPhase(id);
+  if (!phase) throw new Error(`Phase inconnue : ${id}`);
+
+  // Mode démo : on simule le flux en découpant le livrable.
+  if (!hasRealKey) {
+    for (const c of chunk(phase.mock(idea))) {
+      yield c;
+      await new Promise((r) => setTimeout(r, 12));
+    }
+    return;
+  }
+
+  const client = getClient();
+  if (!client) {
+    yield phase.mock(idea);
+    return;
+  }
+  const stream = client.messages.stream({
+    model: MODEL,
+    max_tokens: 2048,
+    system: phase.system,
+    messages: [{ role: "user", content: phase.user(idea, prior) }],
+  });
+  for await (const ev of stream) {
+    if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") {
+      yield ev.delta.text;
+    }
+  }
 }

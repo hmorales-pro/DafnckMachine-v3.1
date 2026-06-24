@@ -76,29 +76,57 @@ export default function StudioPage() {
     setGen(null);
     setQa({ running: false });
 
-    const prior: Partial<Record<PhaseId, string>> = {};
+    try {
+      const res = await fetch("/api/build/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idea: trimmed }),
+      });
+      if (!res.body) throw new Error("Pas de flux");
 
-    for (const phase of PHASES_META) {
-      setStates((s) => ({ ...s, [phase.id]: { status: "running" } }));
-      setOpen(phase.id);
-      try {
-        const res = await fetch("/api/build", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idea: trimmed, phaseId: phase.id, prior }),
-        });
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        prior[phase.id] = data.artifact;
-        setMock(Boolean(data.mock));
-        setStates((s) => ({
-          ...s,
-          [phase.id]: { status: "done", artifact: data.artifact },
-        }));
-      } catch {
-        setStates((s) => ({ ...s, [phase.id]: { status: "error" } }));
-        break;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const ev = JSON.parse(line) as {
+            type: string;
+            id: PhaseId;
+            text?: string;
+            artifact?: string;
+            mock?: boolean;
+            error?: string;
+          };
+          if (ev.type === "phase-start") {
+            setOpen(ev.id);
+            setStates((s) => ({ ...s, [ev.id]: { status: "running", artifact: "" } }));
+          } else if (ev.type === "delta") {
+            setStates((s) => ({
+              ...s,
+              [ev.id]: { status: "running", artifact: (s[ev.id]?.artifact ?? "") + ev.text },
+            }));
+          } else if (ev.type === "phase-done") {
+            setStates((s) => ({ ...s, [ev.id]: { status: "done", artifact: ev.artifact } }));
+          } else if (ev.type === "done") {
+            setMock(Boolean(ev.mock));
+          } else if (ev.type === "error") {
+            throw new Error(ev.error);
+          }
+        }
       }
+    } catch {
+      setStates((s) => {
+        const next = { ...s };
+        for (const p of PHASES_META) if (next[p.id].status === "running") next[p.id] = { status: "error" };
+        return next;
+      });
     }
 
     setRunning(false);
@@ -383,14 +411,19 @@ export default function StudioPage() {
                 </span>
               </button>
               {isOpen && st.artifact && (
-                <div
-                  className="prose-chat border-t border-white/10 px-5 py-4 text-sm leading-relaxed text-white/80"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(st.artifact) }}
-                />
+                <div className="border-t border-white/10 px-5 py-4 text-sm leading-relaxed text-white/80">
+                  <div
+                    className="prose-chat"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(st.artifact) }}
+                  />
+                  {st.status === "running" && (
+                    <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-violet-300 align-middle" />
+                  )}
+                </div>
               )}
-              {isOpen && st.status === "running" && (
+              {isOpen && st.status === "running" && !st.artifact && (
                 <div className="border-t border-white/10 px-5 py-4 text-sm text-white/40">
-                  L&apos;agent travaille…
+                  L&apos;agent démarre…
                 </div>
               )}
             </div>
